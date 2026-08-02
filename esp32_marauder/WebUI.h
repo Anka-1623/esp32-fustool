@@ -8,6 +8,10 @@
 #include <AsyncTCP.h>
 #include <WiFi.h>
 #include <LinkedList.h>
+#include <FS.h>
+#ifndef HAS_SD
+  #include <FFat.h>
+#endif
 
 // ---- Change these to whatever you want the network to look like ----
 #define WEBUI_AP_SSID "ESP32_Marauder_AP"
@@ -39,6 +43,11 @@ class WebUI {
 
     void handleCmd(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total);
     void handleStatus(AsyncWebServerRequest *request);
+
+    fs::FS* captureFS();
+    void handleFilesList(AsyncWebServerRequest *request);
+    void handleFilesDownload(AsyncWebServerRequest *request);
+    void handleFilesDelete(AsyncWebServerRequest *request);
 
   public:
     void begin();

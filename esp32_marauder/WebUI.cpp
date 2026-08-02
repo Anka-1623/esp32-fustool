@@ -7,6 +7,10 @@ extern WiFiScan wifi_scan_obj;
 extern CommandLine cli_obj;
 extern LinkedList<BleDevice>* ble_devices;
 extern LinkedList<AccessPoint>* access_points;
+#ifdef HAS_SD
+  #include "SDInterface.h"
+  extern SDInterface sd_obj;
+#endif
 
 static const char WEBUI_HTML[] PROGMEM = R"=====(
 <!DOCTYPE html>
@@ -85,6 +89,16 @@ static const char WEBUI_HTML[] PROGMEM = R"=====(
     <thead><tr><th>Isim</th><th>MAC</th><th>Sinyal</th></tr></thead>
     <tbody></tbody>
   </table>
+</div>
+
+<div class="panel">
+  <h2>[ Yakalanan Dosyalar ]</h2>
+  <button onclick="loadFiles()">listeyi yenile</button>
+  <table id="filesTable">
+    <thead><tr><th>Dosya</th><th>Boyut</th><th></th></tr></thead>
+    <tbody></tbody>
+  </table>
+  <div class="note">sniffbeacon/sniffpwn/sniffpmkid gibi paket yakalayan komutlar calisirken buraya .pcap dosyalari duser (handshake dahil), buradan indirebilirsiniz.</div>
 </div>
 
 <div class="panel">
@@ -207,6 +221,44 @@ function sendCmd() {
   fetch('/api/cmd', { method: 'POST', body: cmd });
   document.getElementById('cmdInput').value = '';
 }
+
+function fmtSize(b) {
+  if (b > 1024*1024) return (b/1024/1024).toFixed(1) + ' MB';
+  if (b > 1024) return (b/1024).toFixed(1) + ' KB';
+  return b + ' B';
+}
+
+function loadFiles() {
+  fetch('/api/files/list').then(r => r.json()).then(d => {
+    const tbody = document.querySelector('#filesTable tbody');
+    tbody.innerHTML = '';
+    d.files.forEach(f => {
+      const tr = document.createElement('tr');
+      const nameCell = document.createElement('td');
+      nameCell.innerText = f.name;
+      const sizeCell = document.createElement('td');
+      sizeCell.innerText = fmtSize(f.size);
+      const actionCell = document.createElement('td');
+      const dlBtn = document.createElement('a');
+      dlBtn.href = '/api/files/download?name=' + encodeURIComponent(f.name);
+      dlBtn.innerText = 'indir';
+      dlBtn.style.color = 'var(--grn)';
+      dlBtn.style.marginRight = '10px';
+      const delBtn = document.createElement('button');
+      delBtn.className = 'danger';
+      delBtn.innerText = 'sil';
+      delBtn.onclick = () => { fetch('/api/files/delete?name=' + encodeURIComponent(f.name)).then(loadFiles); };
+      actionCell.appendChild(dlBtn);
+      actionCell.appendChild(delBtn);
+      tr.appendChild(nameCell);
+      tr.appendChild(sizeCell);
+      tr.appendChild(actionCell);
+      tbody.appendChild(tr);
+    });
+  });
+}
+loadFiles();
+setInterval(loadFiles, 5000);
 </script>
 </body>
 </html>
@@ -266,6 +318,16 @@ void WebUI::begin() {
 
   server.on("/api/status", HTTP_GET, [this](AsyncWebServerRequest *request) {
     this->handleStatus(request);
+  });
+
+  server.on("/api/files/list", HTTP_GET, [this](AsyncWebServerRequest *request) {
+    this->handleFilesList(request);
+  });
+  server.on("/api/files/download", HTTP_GET, [this](AsyncWebServerRequest *request) {
+    this->handleFilesDownload(request);
+  });
+  server.on("/api/files/delete", HTTP_GET, [this](AsyncWebServerRequest *request) {
+    this->handleFilesDelete(request);
   });
 
   server.on("/api/cmd", HTTP_POST,
@@ -418,6 +480,60 @@ void WebUI::handleStatus(AsyncWebServerRequest *request) {
   String out;
   serializeJson(doc, out);
   request->send(200, "application/json", out);
+}
+
+fs::FS* WebUI::captureFS() {
+  #ifdef HAS_SD
+    if (sd_obj.supported) return &SD;
+  #endif
+  return &FFat;
+}
+
+void WebUI::handleFilesList(AsyncWebServerRequest *request) {
+  DynamicJsonDocument doc(4096);
+  JsonArray arr = doc.createNestedArray("files");
+  fs::FS* fs = this->captureFS();
+  File root = fs->open("/");
+  if (root && root.isDirectory()) {
+    File f = root.openNextFile();
+    while (f) {
+      if (!f.isDirectory()) {
+        JsonObject o = arr.createNestedObject();
+        String n = String(f.name());
+        if (!n.startsWith("/")) n = "/" + n;
+        o["name"] = n;
+        o["size"] = f.size();
+      }
+      f = root.openNextFile();
+    }
+  }
+  String out;
+  serializeJson(doc, out);
+  request->send(200, "application/json", out);
+}
+
+void WebUI::handleFilesDownload(AsyncWebServerRequest *request) {
+  if (!request->hasParam("name")) {
+    request->send(400, "text/plain", "missing name");
+    return;
+  }
+  String name = request->getParam("name")->value();
+  if (!name.startsWith("/")) name = "/" + name;
+  fs::FS* fs = this->captureFS();
+  if (!fs->exists(name)) {
+    request->send(404, "text/plain", "not found");
+    return;
+  }
+  request->send(*fs, name, "application/octet-stream", true);
+}
+
+void WebUI::handleFilesDelete(AsyncWebServerRequest *request) {
+  if (request->hasParam("name")) {
+    String name = request->getParam("name")->value();
+    if (!name.startsWith("/")) name = "/" + name;
+    this->captureFS()->remove(name);
+  }
+  request->send(200, "text/plain", "ok");
 }
 
 void WebUI::handleCmd(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {

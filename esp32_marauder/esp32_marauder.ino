@@ -22,6 +22,8 @@ https://www.online-utility.org/image/convert/to/XBM
 #include "WiFiScan.h"
 #ifdef HAS_SD
   #include "SDInterface.h"
+#else
+  #include <FFat.h>
 #endif
 #include "Buffer.h"
 
@@ -355,7 +357,10 @@ void setup()
       // Do some SD stuff
       if(!sd_obj.initSD())
         Serial.println(F("SD Card NOT Supported"));
-
+    #else
+      // No SD card: use the internal flash FAT partition for pcap/log storage
+      if(!FFat.begin(true))
+        Serial.println(F("FFat mount failed"));
     #endif
   #endif
 

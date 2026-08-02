@@ -1,6 +1,9 @@
 #include "esp_random.h"
 #include "WiFiScan.h"
 #include "lang_var.h"
+#ifndef HAS_SD
+  #include <FFat.h>
+#endif
 
 #ifdef HAS_PSRAM
   struct mac_addr* mac_history = nullptr;
