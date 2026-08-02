@@ -12,6 +12,9 @@
 #ifndef HAS_SD
   #include <FFat.h>
 #endif
+#ifdef HAS_NEOPIXEL_LED
+  #include "LedInterface.h"
+#endif
 
 // ---- Change these to whatever you want the network to look like ----
 #define WEBUI_AP_SSID "FUSTOOL_ESP32"
@@ -29,10 +32,19 @@ class WebUI {
     uint32_t capture_started_at = 0;
     uint32_t capture_duration_ms = 0;
     String capture_label = "";
+    bool is_attack = false;
+    bool bt_scanning = false;
+    bool led_state_on = false;
+    uint32_t last_led_toggle = 0;
+    uint32_t loop_count = 0;
+    uint32_t loop_hz = 0;
+    uint32_t last_loop_hz_calc = 0;
 
     void ensureAP();
     void queueCommand(String cmd);
     void scheduleAutoStop(uint32_t ms_from_now, String label);
+    void updateActivityLed();
+    void handleSystemStatus(AsyncWebServerRequest *request);
 
     void handleRoot(AsyncWebServerRequest *request);
 

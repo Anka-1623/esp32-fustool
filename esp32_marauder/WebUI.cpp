@@ -10,6 +10,9 @@ extern LinkedList<BleDevice>* ble_devices;
   #include "SDInterface.h"
   extern SDInterface sd_obj;
 #endif
+#ifdef HAS_NEOPIXEL_LED
+  extern LedInterface led_obj;
+#endif
 
 static const char WEBUI_HTML[] PROGMEM = R"=====(
 <!DOCTYPE html>
@@ -72,6 +75,19 @@ static const char WEBUI_HTML[] PROGMEM = R"=====(
 <body>
 <h1>&gt; FUSTOOL_CONTROL <span class="blink">_</span></h1>
 <div class="sub">root@esp32-s3:~# uplink established</div>
+
+<div class="panel">
+  <h2>[ Sistem Monitoru ]</h2>
+  <table>
+    <tr><td>Sicaklik</td><td id="sysTemp">-</td></tr>
+    <tr><td>Bos Bellek</td><td id="sysHeap">-</td></tr>
+    <tr><td>CPU Frekansi</td><td id="sysFreq">-</td></tr>
+    <tr><td>Ana Dongu Hizi (yuk gostergesi)</td><td id="sysLoopHz">-</td></tr>
+    <tr><td>Calisma Suresi</td><td id="sysUptime">-</td></tr>
+  </table>
+  <div class="note">ESP32'de gercek "%CPU kullanimi" ozel bir ISP-IDF derlemesi gerektirir, bu SDK ile mumkun degil. Bunun yerine gercek sicaklik/bellek/frekans degerlerini ve dongu hizini gosteriyoruz - dongu hizi dusukse (norm. ~1000+ Hz) sistem o an tarama/saldiri gibi agir bir iş yapiyor demektir.</div>
+  <div class="note">RGB LED: <b style="color:#00e5ff">mavi yanip sonme</b>=WiFi kesif, <b style="color:#ff00ff">mor yanip sonme</b>=Bluetooth kesif, <b style="color:#ffaa00">turuncu yanip sonme</b>=veri toplama, <b style="color:#ff3b3b">kirmizi yanip sonme</b>=saldiri, sonuk yesil=bosta.</div>
+</div>
 
 <div class="panel" id="captureBar">
   <h2>[ Aktif Islem ]</h2>
@@ -290,9 +306,22 @@ function pollCapture() {
   });
 }
 
+function pollSystem() {
+  fetch('/api/system/status').then(r => r.json()).then(d => {
+    document.getElementById('sysTemp').innerText = d.temp_c.toFixed(1) + ' C';
+    document.getElementById('sysHeap').innerText = fmtSize(d.free_heap) + ' / ' + fmtSize(d.total_heap);
+    document.getElementById('sysFreq').innerText = d.cpu_mhz + ' MHz';
+    document.getElementById('sysLoopHz').innerText = d.loop_hz + ' Hz';
+    const u = d.uptime_s;
+    document.getElementById('sysUptime').innerText = Math.floor(u/3600) + 's ' + Math.floor((u%3600)/60) + 'd ' + (u%60) + 'sn';
+  });
+}
+
 loadFiles();
 setInterval(loadFiles, 5000);
 setInterval(pollCapture, 1000);
+setInterval(pollSystem, 2000);
+pollSystem();
 </script>
 </body>
 </html>
@@ -354,6 +383,9 @@ void WebUI::begin() {
   server.on("/api/status", HTTP_GET, [this](AsyncWebServerRequest *request) {
     this->handleStatus(request);
   });
+  server.on("/api/system/status", HTTP_GET, [this](AsyncWebServerRequest *request) {
+    this->handleSystemStatus(request);
+  });
 
   server.on("/api/files/list", HTTP_GET, [this](AsyncWebServerRequest *request) {
     this->handleFilesList(request);
@@ -377,6 +409,14 @@ void WebUI::begin() {
 }
 
 void WebUI::loop() {
+  loop_count++;
+  uint32_t now0 = millis();
+  if (now0 - last_loop_hz_calc >= 1000) {
+    loop_hz = loop_count;
+    loop_count = 0;
+    last_loop_hz_calc = now0;
+  }
+
   // Drain queued commands on the main task (NOT the async TCP task) since the
   // WiFi/BT drivers are not safe to poke from arbitrary FreeRTOS tasks.
   // Uses a FreeRTOS queue (not a manually-locked list) since that's the
@@ -393,6 +433,7 @@ void WebUI::loop() {
   if (auto_stop_at != 0 && (int32_t)(millis() - auto_stop_at) > 0) {
     auto_stop_at = 0;
     capture_started_at = 0;
+    is_attack = false;
     this->queueCommand("stopscan");
   }
 
@@ -404,6 +445,8 @@ void WebUI::loop() {
       this->ensureAP();
     }
   }
+
+  this->updateActivityLed();
 }
 
 void WebUI::scheduleAutoStop(uint32_t ms_from_now, String label) {
@@ -411,6 +454,54 @@ void WebUI::scheduleAutoStop(uint32_t ms_from_now, String label) {
   capture_started_at = millis();
   capture_duration_ms = ms_from_now;
   capture_label = label;
+}
+
+// Blinks the onboard RGB LED with a color that tells you what the radio is
+// currently doing: cyan = WiFi discovery, magenta = Bluetooth discovery,
+// orange = capturing packets, red = attack in progress, dim green = idle.
+void WebUI::updateActivityLed() {
+  #ifdef HAS_NEOPIXEL_LED
+    uint32_t now = millis();
+    bool active = false;
+    int r = 0, g = 0, b = 0;
+
+    if (is_attack) {
+      active = true; r = 255; g = 0; b = 0;
+    } else if (capture_started_at != 0) {
+      active = true; r = 255; g = 120; b = 0;
+    } else if (bt_scanning) {
+      active = true; r = 200; g = 0; b = 200;
+    } else if (WiFi.scanComplete() == -1) {
+      active = true; r = 0; g = 180; b = 255;
+    }
+
+    if (!active) {
+      led_state_on = false;
+      led_obj.setMode(MODE_CUSTOM);
+      led_obj.setColor(0, 10, 0);
+      return;
+    }
+
+    if (now - last_led_toggle > 300) {
+      last_led_toggle = now;
+      led_state_on = !led_state_on;
+      led_obj.setMode(MODE_CUSTOM);
+      led_obj.setColor(led_state_on ? r : 0, led_state_on ? g : 0, led_state_on ? b : 0);
+    }
+  #endif
+}
+
+void WebUI::handleSystemStatus(AsyncWebServerRequest *request) {
+  DynamicJsonDocument doc(256);
+  doc["temp_c"] = temperatureRead();
+  doc["free_heap"] = ESP.getFreeHeap();
+  doc["total_heap"] = ESP.getHeapSize();
+  doc["cpu_mhz"] = ESP.getCpuFreqMHz();
+  doc["uptime_s"] = millis() / 1000;
+  doc["loop_hz"] = loop_hz;
+  String out;
+  serializeJson(doc, out);
+  request->send(200, "application/json", out);
 }
 
 void WebUI::handleRoot(AsyncWebServerRequest *request) {
@@ -465,6 +556,7 @@ void WebUI::handleWifiLock(AsyncWebServerRequest *request) {
     // scanall captures beacons, probes, deauths and EAPOL/handshake frames
     // on the locked channel - i.e. "all the network's data", not just beacons.
     this->queueCommand("scanall");
+    is_attack = false;
     this->scheduleAutoStop(25000, "Veri toplaniyor (kanal " + String(ch) + ")");
   }
   request->send(200, "text/plain", "ok");
@@ -483,6 +575,7 @@ void WebUI::handleWifiAttack(AsyncWebServerRequest *request) {
     } else if (type == "funny") {
       this->queueCommand("attack -t funny");
     }
+    is_attack = true;
     this->scheduleAutoStop(8000, type + " saldirisi");
   }
   request->send(200, "text/plain", "ok");
@@ -504,11 +597,13 @@ void WebUI::handleCaptureStatus(AsyncWebServerRequest *request) {
 
 void WebUI::handleBtScanStart(AsyncWebServerRequest *request) {
   this->queueCommand("sniffbt");
+  bt_scanning = true;
   request->send(200, "text/plain", "started");
 }
 
 void WebUI::handleBtScanStop(AsyncWebServerRequest *request) {
   this->queueCommand("stopscan");
+  bt_scanning = false;
   request->send(200, "text/plain", "stopped");
 }
 

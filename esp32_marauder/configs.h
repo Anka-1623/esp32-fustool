@@ -403,7 +403,7 @@
     //#define HAS_BATTERY
     #define HAS_BT
     //#define HAS_BUTTONS
-    //#define HAS_NEOPIXEL_LED
+    #define HAS_NEOPIXEL_LED // onboard RGB LED, driven from WebUI to show activity
     //#define HAS_PWR_MGMT
     //#define HAS_SCREEN
     //#define HAS_SD
@@ -2696,6 +2696,9 @@
       #define PIN 21
     #elif defined(MARAUDER_M5_NANO_C6)
       #define PIN 20
+    #elif defined(GENERIC_ESP32)
+      #define PIN 48 // most ESP32-S3-DevKitC-1 boards have the onboard WS2812 RGB LED on GPIO48.
+                      // If yours doesn't light up, change this to your board's actual RGB pin (some clones use 38).
     #else
       #define PIN 25
     #endif
