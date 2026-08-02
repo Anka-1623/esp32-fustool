@@ -2574,15 +2574,26 @@ bool WiFiScan::shutdownWiFi() {
     if (!this->wifi_connected) {
       esp_wifi_set_promiscuous(false);
       WiFi.disconnect();
-      WiFi.mode(WIFI_OFF);
 
       dst_mac = "ff:ff:ff:ff:ff:ff";
-    
-      esp_wifi_set_mode(WIFI_MODE_NULL);
-      esp_wifi_stop();
-      esp_wifi_restore();
-      esp_wifi_deinit();
-      esp_netif_deinit(); 
+
+      #ifdef GENERIC_ESP32
+        // GENERIC_ESP32 (this fork's WebUI) keeps a softAP running at all
+        // times so the dashboard stays reachable. The full teardown below
+        // (WiFi off + esp_wifi_deinit + esp_netif_deinit) destroys netif
+        // objects that Arduino's WiFi library never re-creates on its own,
+        // so the softAP can never come back after a scan/attack finishes.
+        // Just stop the promiscuous/scan side and leave the driver+netif
+        // alive; WebUI::ensureAP() re-asserts AP_STA + softAP right after.
+        esp_wifi_set_mode(WIFI_MODE_APSTA);
+      #else
+        WiFi.mode(WIFI_OFF);
+        esp_wifi_set_mode(WIFI_MODE_NULL);
+        esp_wifi_stop();
+        esp_wifi_restore();
+        esp_wifi_deinit();
+        esp_netif_deinit();
+      #endif
     }
 
     this->setLEDMode(MODE_OFF);
