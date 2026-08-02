@@ -337,9 +337,13 @@ void WebUI::queueCommand(String cmd) {
 
 void WebUI::ensureAP() {
   if (!(WiFi.getMode() & WIFI_MODE_AP)) {
-    WiFi.mode(WIFI_AP_STA);
-    WiFi.softAP(WEBUI_AP_SSID, WEBUI_AP_PASS);
+    this->forceApRestart();
   }
+}
+
+void WebUI::forceApRestart() {
+  WiFi.mode(WIFI_AP_STA);
+  WiFi.softAP(WEBUI_AP_SSID, WEBUI_AP_PASS);
 }
 
 void WebUI::begin() {
@@ -449,6 +453,17 @@ void WebUI::loop() {
     capture_started_at = 0;
     is_attack = false;
     this->queueCommand("stopscan");
+    // Give "stopscan" a moment to actually run (it's still sitting in
+    // cmd_queue right now) before we force the AP back - then force it
+    // unconditionally rather than trusting the AP-mode-bit check, since
+    // that bit can be set without the SSID/password/DHCP actually being
+    // re-applied.
+    force_ap_restart_at = millis() + 1000;
+  }
+
+  if (force_ap_restart_at != 0 && (int32_t)(millis() - force_ap_restart_at) > 0) {
+    force_ap_restart_at = 0;
+    this->forceApRestart();
   }
 
   static uint32_t last_check = 0;

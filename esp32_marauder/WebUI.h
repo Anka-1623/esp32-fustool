@@ -46,8 +46,14 @@ class WebUI {
     // defer that work into loop(), same as the command queue does.
     volatile bool pending_scan_start = false;
     volatile bool pending_scan_stop = false;
+    // Set after queuing "stopscan" post-capture/attack; a bit later we force
+    // a full WiFi.mode(WIFI_AP_STA)+softAP(ssid,pass) unconditionally, since
+    // just checking "is the AP mode bit set" isn't enough to guarantee the
+    // actual SSID/password/DHCP got re-applied correctly.
+    uint32_t force_ap_restart_at = 0;
 
     void ensureAP();
+    void forceApRestart();
     void queueCommand(String cmd);
     void scheduleAutoStop(uint32_t ms_from_now, String label);
     void updateActivityLed();

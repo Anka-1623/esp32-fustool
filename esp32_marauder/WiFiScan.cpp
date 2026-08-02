@@ -2584,8 +2584,10 @@ bool WiFiScan::shutdownWiFi() {
         // objects that Arduino's WiFi library never re-creates on its own,
         // so the softAP can never come back after a scan/attack finishes.
         // Just stop the promiscuous/scan side and leave the driver+netif
-        // alive; WebUI::ensureAP() re-asserts AP_STA + softAP right after.
-        esp_wifi_set_mode(WIFI_MODE_APSTA);
+        // alive - don't touch the wifi mode here at all. WebUI forces a
+        // full WiFi.mode(WIFI_AP_STA)+WiFi.softAP(ssid,pass) call itself
+        // right after "stopscan" runs, which is the only thing that
+        // reliably re-applies the actual SSID/password/DHCP config.
       #else
         WiFi.mode(WIFI_OFF);
         esp_wifi_set_mode(WIFI_MODE_NULL);
