@@ -427,6 +427,19 @@ void WebUI::loop() {
     cli_obj.runCommand(String(buf));
   }
 
+  // Same reasoning: WiFi.scanNetworks()/scanDelete() must run here, not in
+  // the HTTP handler's AsyncTCP task context.
+  if (pending_scan_stop) {
+    pending_scan_stop = false;
+    WiFi.scanDelete();
+  }
+  if (pending_scan_start) {
+    pending_scan_start = false;
+    if (WiFi.scanComplete() != -1) { // don't restart an already-running scan
+      WiFi.scanNetworks(true /* async */, false, false, 300, 0);
+    }
+  }
+
   // If a bounded capture/attack was scheduled, auto-stop it so the AP
   // (and the client's connection to this UI) reliably comes back without
   // needing a request that can no longer reach us.
@@ -516,12 +529,12 @@ void WebUI::handleRoot(AsyncWebServerRequest *request) {
 // works fine alongside an active softAP (WIFI_AP_STA), so this listing
 // never drops the connection.
 void WebUI::handleWifiDiscoverStart(AsyncWebServerRequest *request) {
-  WiFi.scanNetworks(true /* async */, false, false, 300, 0);
+  pending_scan_start = true;
   request->send(200, "text/plain", "started");
 }
 
 void WebUI::handleWifiDiscoverStop(AsyncWebServerRequest *request) {
-  WiFi.scanDelete();
+  pending_scan_stop = true;
   request->send(200, "text/plain", "stopped");
 }
 

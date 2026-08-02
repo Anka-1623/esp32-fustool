@@ -39,6 +39,13 @@ class WebUI {
     uint32_t loop_count = 0;
     uint32_t loop_hz = 0;
     uint32_t last_loop_hz_calc = 0;
+    // WiFi.* calls (scanNetworks/scanDelete/softAP) must only ever run from
+    // the main loop task, never directly from an AsyncTCP callback - the
+    // ESP32 WiFi driver isn't safe to poke from another task and doing so
+    // can hard-hang the whole chip with no crash log at all. These flags
+    // defer that work into loop(), same as the command queue does.
+    volatile bool pending_scan_start = false;
+    volatile bool pending_scan_stop = false;
 
     void ensureAP();
     void queueCommand(String cmd);
