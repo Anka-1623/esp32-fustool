@@ -1,27 +1,33 @@
-<!---[![License: MIT](https://img.shields.io/github/license/mashape/apistatus.svg)](https://github.com/justcallmekoko/ESP32Marauder/blob/master/LICENSE)--->
-<!---[![Gitter](https://badges.gitter.im/justcallmekoko/ESP32Marauder.png)](https://gitter.im/justcallmekoko/ESP32Marauder)--->
-<!---[![Build Status](https://travis-ci.com/justcallmekoko/ESP32Marauder.svg?branch=master)](https://travis-ci.com/justcallmekoko/ESP32Marauder)--->
-<!---Shields/Badges https://shields.io/--->
+# FUSTOOL-ESP32
 
-# ESP32 Marauder
-<p align="center"><img alt="Marauder logo" src="https://github.com/justcallmekoko/ESP32Marauder/blob/master/pictures/marauder_skull_patch_04_full_final.png?raw=true" width="300"></p>
-<p align="center">
-  <b>A suite of WiFi/Bluetooth offensive and defensive tools for the ESP32</b>
-  <br><br>
-  <a href="https://github.com/justcallmekoko/ESP32Marauder/blob/master/LICENSE"><img alt="License" src="https://img.shields.io/github/license/mashape/apistatus.svg"></a>
-  <a href="https://gitter.im/justcallmekoko/ESP32Marauder"><img alt="Gitter" src="https://badges.gitter.im/justcallmekoko/ESP32Marauder.png"/></a>
-  <br>
-  <a href="https://twitter.com/intent/follow?screen_name=jcmkyoutube"><img src="https://img.shields.io/twitter/follow/jcmkyoutube?style=social&logo=twitter" alt="Twitter"></a>
-  <a href="https://www.instagram.com/just.call.me.koko"><img src="https://img.shields.io/badge/Follow%20Me-Instagram-orange" alt="Instagram"/></a>
-  <br><br>
-</p>
-    
-[![Build and Push](https://github.com/justcallmekoko/ESP32Marauder/actions/workflows/build_push.yml/badge.svg)](https://github.com/justcallmekoko/ESP32Marauder/actions/workflows/build_push.yml)
+**FUSTOOL'un ESP32 icin yazilan surumu** — ESP32-S3 (N16R8 ve benzeri) genel amacli development kartlari uzerinde calisan bir WiFi/Bluetooth guvenlik test araci. Ekran, SD kart veya butona ihtiyac duymadan, kartin actigi kendi WiFi agina baglanip tarayicidan **FUSTOOL Control** paneli uzerinden kullanilir.
 
-## Getting Started
-Download the [latest release](https://github.com/justcallmekoko/ESP32Marauder/releases/latest) of the firmware.  
+Bu proje [justcallmekoko/ESP32Marauder](https://github.com/justcallmekoko/ESP32Marauder) tabanlidir; orijinal projeye ve yazarina tesekkurler. Lisans (GPL-3.0) ve atif korunmustur, bkz. [LICENSE](LICENSE).
 
-Check out the project [wiki](https://github.com/justcallmekoko/ESP32Marauder/wiki) for a full overview of the ESP32 Marauder
+## Neler farkli?
 
-# For Sale Now
-You can buy the ESP32 Marauder using [this link](https://www.justcallmekokollc.com)
+- **Genel ESP32-S3 destegi**: Orijinal proje klasik ESP32 ve belirli hazir Marauder kartlarini hedefler; bu fork `GENERIC_ESP32` profiliyle ekransiz/SD'siz herhangi bir ESP32-S3 devkite (N16R8 dahil, 8MB octal PSRAM aktif) kurulacak sekilde yapilandirilmistir.
+- **WebUI paneli** (`esp32_marauder/WebUI.h/.cpp`): Kart kendi WiFi erisim noktasini (AP) acar, taraayicidan baglanip:
+  - WiFi'daki yakin agları (AP baglantisini dusurmeden) listeler,
+  - Bluetooth (BLE) cihazlarini canli listeler,
+  - Bulunan bir aga tiklayinca **veri topla / saldiri** aksiyonlarini (sinirli sureli, otomatik durup baglantiyi geri getiren) sunar,
+  - Marauder'in tum orijinal komut satiri komutlarini bir konsol kutusundan calistirir,
+  - Yakalanan `.pcap`/handshake dosyalarini (dahili flash / FFat) listeler ve indirir.
+- **Dahili flash depolama**: SD kart olmadan da paket yakalama (pcap/log) dosyalari `FFat` (16MB flash uzerindeki FAT bolumu) icine yazilir.
+
+## Kurulum (ozet)
+
+1. `arduino-cli` + `esp32:esp32@2.0.11` board core kurulu olmali.
+2. Bagimliliklari `esp32_marauder/` yaninda `libraries/` altina kurun (bkz. `.github/workflows` kaldirildigindan surumler icin orijinal ESP32Marauder repo CI dosyasina bakabilirsiniz: TFT_eSPI, NimBLE-Arduino, ESPAsyncWebServer, AsyncTCP, ArduinoJson, LinkedList, vb.).
+3. Derleme/flash:
+   ```
+   arduino-cli compile --fqbn "esp32:esp32:esp32s3:PartitionScheme=app3M_fat9M_16MB,FlashSize=16M,PSRAM=opi" \
+     --libraries ~/Arduino/libraries esp32_marauder
+   arduino-cli upload --fqbn "esp32:esp32:esp32s3:PartitionScheme=app3M_fat9M_16MB,FlashSize=16M,PSRAM=opi" \
+     -p /dev/ttyACM0 esp32_marauder
+   ```
+4. Kart acilinca seri konsolda AP adi/sifresi ve panel adresi (`http://192.168.4.1:8080/`) yazdirilir. AP adini/sifresini degistirmek icin `esp32_marauder/WebUI.h` basindaki `WEBUI_AP_SSID` / `WEBUI_AP_PASS` degerlerini duzenleyip yeniden flashlayin.
+
+## Sorumlu kullanim
+
+Bu, gercek WiFi/Bluetooth guvenlik testi yapabilen (deauth, paket yakalama, tarama) bir araçtir. Sadece **kendi ağınızda** veya **yazılı izniniz olan** ortamlarda kullanın; başkasının ağında izinsiz kullanmak yasa dışıdır.

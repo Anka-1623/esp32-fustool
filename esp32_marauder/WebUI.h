@@ -14,19 +14,25 @@
 #endif
 
 // ---- Change these to whatever you want the network to look like ----
-#define WEBUI_AP_SSID "ESP32_Marauder_AP"
+#define WEBUI_AP_SSID "FUSTOOL_ESP32"
 #define WEBUI_AP_PASS "12345678910"   // WPA2, min 8 chars
 #define WEBUI_PORT 8080
 // ----------------------------------------------------------------------
 
+#define WEBUI_CMD_MAXLEN 160
+
 class WebUI {
   private:
     AsyncWebServer server{WEBUI_PORT};
-    LinkedList<String>* cmd_queue;
-    portMUX_TYPE cmd_mux = portMUX_INITIALIZER_UNLOCKED;
+    QueueHandle_t cmd_queue = NULL;
+    uint32_t auto_stop_at = 0;
+    uint32_t capture_started_at = 0;
+    uint32_t capture_duration_ms = 0;
+    String capture_label = "";
 
     void ensureAP();
     void queueCommand(String cmd);
+    void scheduleAutoStop(uint32_t ms_from_now, String label);
 
     void handleRoot(AsyncWebServerRequest *request);
 
@@ -34,8 +40,8 @@ class WebUI {
     void handleWifiDiscoverStop(AsyncWebServerRequest *request);
     void handleWifiList(AsyncWebServerRequest *request);
     void handleWifiLock(AsyncWebServerRequest *request);
-    void handleWifiInfo(AsyncWebServerRequest *request);
     void handleWifiAttack(AsyncWebServerRequest *request);
+    void handleCaptureStatus(AsyncWebServerRequest *request);
 
     void handleBtScanStart(AsyncWebServerRequest *request);
     void handleBtScanStop(AsyncWebServerRequest *request);
