@@ -179,7 +179,7 @@ function renderWifiTable() {
       td.innerHTML = `
         <div class="recon-field"><b>BSSID:</b> ${n.bssid}</div>
         <div class="detail-actions">
-          <button onclick="wifiAction(${i}, 'lock')">veri topla (tum paketler, 25sn)</button>
+          <button onclick="wifiAction(${i}, 'lock')">veri topla (tum paketler, 12sn)</button>
         </div>
         <div class="detail-actions">
           <select id="atkType-${i}">
@@ -191,6 +191,7 @@ function renderWifiTable() {
           <button class="danger" onclick="wifiAction(${i}, 'attack')">saldiri baslat (8sn)</button>
         </div>
         <div id="reconOut-${i}"></div>
+        <div class="note">ESP32'nin TEK radyosu var: bu islem calisirken kendi agindan (bu paneli gordugunuz ag) dusersiniz - bu bir hata degil, fiziksel kisit. Islem bitince ESP32'nin agi geri gelir ama telefonunuz OTOMATIK baglanmaz (internetsiz ag oldugu icin) - WiFi ayarlarindan FUSTOOL_ESP32'yi elle tekrar secmeniz gerekir.</div>
       `;
       dr.appendChild(td);
       tbody.appendChild(dr);
@@ -570,7 +571,7 @@ void WebUI::handleWifiLock(AsyncWebServerRequest *request) {
     // on the locked channel - i.e. "all the network's data", not just beacons.
     this->queueCommand("scanall");
     is_attack = false;
-    this->scheduleAutoStop(25000, "Veri toplaniyor (kanal " + String(ch) + ")");
+    this->scheduleAutoStop(12000, "Veri toplaniyor (kanal " + String(ch) + ")");
   }
   request->send(200, "text/plain", "ok");
 }
